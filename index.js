@@ -5,13 +5,14 @@ class BadgeGenerator {
      /**
      * Creates a badge generator.
      * @param {string} canvasId - The ID of the canvas element.
-     * @param {{ downloadBtnId?: string, exportHeight: number [2048], exportWidth: number [2048]}} options - Configuration options.
+     * @param {{ downloadBtnId?: string, exportHeight?: number [2048], exportWidth?: number [2048], exportName?: string}} options - Configuration options.
      */
     constructor(canvasId, options) {
         this.canvasId = canvasId;
         this.canvas = document.getElementById(canvasId);
         this.exportHeight = options.exportHeight?? 2048;
         this.exportWidth = options.exportWidth?? 2048;
+        this.exportName = options.exportName?? "Image";
         if (!this.canvas) {
             throw new Error("Canvas element not found");
         }
@@ -28,13 +29,28 @@ class BadgeGenerator {
         this.layers = [];
         this.refreshSize();
         this.btnEventId = null;
+        if (this.downloadBtn) {
+            if (this.btnEventId) {
+                this.downloadBtn.removeEventListener('click', this.btnEventId);
+            }
+            this.btnEventId = async () => {
+                let url = await this.getDownloadURL();
+                let a = document.createElement('a');
+                a.href = 'data:image/png;base64,' + url.split(",")[1];
+                a.download = this.exportName + '.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+        
+            this.downloadBtn.addEventListener('click', this.btnEventId);
+        }        
     }
 
     /**
      * Refreshes the size of the canvas.
      */
     refreshSize(){
-        console.log("refreshSize");
         this.canvas.width = this.canvas.clientWidth;
         this.canvas.height = this.canvas.clientHeight;
         this.draw();
@@ -43,18 +59,18 @@ class BadgeGenerator {
     /**
      * Clears all layers from the badge.
      */
-    clear(){
+    async clear(){
         this.layers = [];
-        this.draw();
+        await this.draw();
     }
 
     /**
      * Adds a new layer to the badge.
      * @param {BadgeLayer} layer - The layer to add.
      */
-    addLayer(layer) {
+    async addLayer(layer) {
         this.layers.push(layer);
-        this.draw();
+        await this.draw();
         setTimeout(() => {
             const resizeEvent = new Event('resize');
             window.dispatchEvent(resizeEvent);
@@ -66,19 +82,13 @@ class BadgeGenerator {
      * @returns {Promise<string>} The generated data URL.
      */
     async getDownloadURL() {
-        const hiddenCanvas = document.createElement('canvas');
-        hiddenCanvas.id = `${this.canvasId}-hidden`;
-        hiddenCanvas.width = this.exportWidth;
-        hiddenCanvas.height = this.exportHeight;
-        hiddenCanvas.style.width = this.exportWidth;
-        hiddenCanvas.style.height = this.exportHeight;
-        document.body.appendChild(hiddenCanvas);
-        const hiddenGen = new BadgeGenerator(hiddenCanvas.id);
-        hiddenGen.layers = this.layers;
-        await hiddenGen.draw();
-        const dataURL = hiddenCanvas.toDataURL("image/png");
-        document.body.removeChild(hiddenCanvas);
-        return dataURL;
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = this.exportWidth;
+        exportCanvas.height = this.exportHeight;
+        const exportCtx = exportCanvas.getContext('2d');
+
+        exportCtx.drawImage(this.canvas, 0, 0, this.exportWidth, this.exportHeight);
+        return exportCanvas.toDataURL('image/png');
     }
 
     /**
@@ -90,39 +100,6 @@ class BadgeGenerator {
     
         for (const layer of this.layers) {
             await layer.draw(this.canvas);
-        }
-    
-        if (this.downloadBtn) {
-            // Vérifie et supprime l'ancien écouteur si déjà ajouté
-            if (this.btnEventId) {
-                this.downloadBtn.removeEventListener('click', this.btnEventId);
-            }
-    
-            // Définit une fonction de téléchargement et l'assigne
-            this.btnEventId = async () => {
-                const hiddenCanvas = document.createElement('canvas');
-                hiddenCanvas.id = `${this.canvasId}-hidden`;
-                hiddenCanvas.width = this.exportWidth;
-                hiddenCanvas.height = this.exportHeight;
-                hiddenCanvas.style.width = this.exportWidth;
-                hiddenCanvas.style.height = this.exportHeight;
-                hiddenCanvas.style.display = "none";
-                document.body.appendChild(hiddenCanvas);
-                const hiddenGen = new BadgeGenerator(hiddenCanvas.id);
-                hiddenGen.layers = this.layers;
-                await hiddenGen.draw();
-                setTimeout(() => {
-                    const dataURL = hiddenCanvas.toDataURL("image/png");
-                    const a = document.createElement('a');
-                    a.href = dataURL;
-                    a.download = 'badge.png';
-                    a.click();
-                    document.body.removeChild(hiddenCanvas);
-                }, 1000);
-            };
-    
-            // Ajoute un seul écouteur
-            this.downloadBtn.addEventListener('click', this.btnEventId);
         }
         return Promise.resolve();
     }    
@@ -193,7 +170,6 @@ class BadgeTextLayer extends BadgeLayer {
         const textMetrics = ctx.measureText(text);
         const renderedHeight = textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent;
         const redenredWidth = textMetrics.width;
-        console.log("a", renderedHeight, redenredWidth, canvas.height, canvas.width);
         return {height: renderedHeight, width: redenredWidth};
     }
 
@@ -204,7 +180,6 @@ class BadgeTextLayer extends BadgeLayer {
         const {height, width} = BadgeTextLayer.getRenderedSize(this.text, this.font, this.options.size, canvas);
         const renderedHeight = height;
         const redenredWidth = width;
-        console.log("b", renderedHeight, redenredWidth);
         this.options.left = (this.options.leftF instanceof Function) ? this.options.leftF(renderedHeight, redenredWidth) : undefined;
         this.options.top = (this.options.topF instanceof Function) ? this.options.topF(renderedHeight, redenredWidth) : undefined;
         this.options.bottom = (this.options.bottomF instanceof Function) ? this.options.bottomF(renderedHeight, redenredWidth) : undefined;
@@ -216,7 +191,6 @@ class BadgeTextLayer extends BadgeLayer {
             ctx.fillText(this.text, canvas.width - this.options.right*canvas.width/100 - textMetrics.width, this.options.top*canvas.height/100+textHeight);
         }
         else if(this.options.right!=undefined && this.options.bottom!=undefined){
-            console.log(canvas.width - this.options.right*canvas.width/100 - textMetrics.width, canvas.height - this.options.bottom*canvas.height/100)
             ctx.fillText(this.text, canvas.width - this.options.right*canvas.width/100 - textMetrics.width, canvas.height - this.options.bottom*canvas.height/100);
         }
         else if(this.options.left!=undefined && this.options.bottom!=undefined){
@@ -260,7 +234,6 @@ class BadgeImageLayer extends BadgeLayer {
         const imgHeight = height * canvas.height / 100;
         // this.image.src = this.imageSrc;
         if(this.image.src !== undefined && this.image.complete && this.image.src !== "") {
-            console.log("draw image ante");
             setTimeout(() => {
                 if (right !== undefined && top !== undefined) {
                     ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, top * canvas.height / 100, imgWidth, imgHeight);
@@ -274,7 +247,7 @@ class BadgeImageLayer extends BadgeLayer {
             }, 0);
             return;
         }
-        this.image.onload = () => {console.log("draw image");
+        this.image.onload = () => {
             setTimeout(() => {
                 if (right !== undefined && top !== undefined) {
                     ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, top * canvas.height / 100, imgWidth, imgHeight);
