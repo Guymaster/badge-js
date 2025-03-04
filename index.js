@@ -161,13 +161,13 @@ class BadgeTextLayer extends BadgeLayer {
      * Creates a text layer.
      * @param {string} text - The text content.
      * @param {string} font - The font of the text.
-     * @param {Object} options - Configuration options for the text layer.
+     * @param {{bottom?: function(renderedHeight: number, redenredWidth: number): number, left?: function(renderedHeight: number, redenredWidth: number): number, right?: function(renderedHeight: number, redenredWidth: number): number, top?: function(renderedHeight: number, redenredWidth: number): number, color?: string, size?: number}} options - Configuration options for the text layer.
      */
     constructor(text, font, options = {
         bottom: undefined,
-        left: (renderedHeight, redenredWidth) => 10,
+        left: (renderedHeight, redenredWidth) => 0,
         right: undefined,
-        top: (renderedHeight, redenredWidth) => 80,
+        top: (renderedHeight, redenredWidth) => 0,
         color: "black",
         size: 20
     }) {
@@ -259,11 +259,23 @@ class BadgeImageLayer extends BadgeLayer {
     async draw(canvas) {
         const ctx = canvas.getContext("2d");
         const { width, height, left, right, top, bottom } = this.options;
-        const imgWidth = (width * canvas.width) / 100;
-        const imgHeight = (height * canvas.height) / 100;
     
         return new Promise((resolve, reject) => {
+            let imgWidth;
+            let imgHeight;
             const drawImage = () => {
+                if(width == undefined && height != undefined){
+                    imgHeight = (height * canvas.height) / 100;
+                    imgWidth = (imgHeight * this.image.width) / this.image.height;
+                }
+                else if(width != undefined && height == undefined){
+                    imgWidth = (width * canvas.width) / 100;
+                    imgHeight = (imgWidth * this.image.height) / this.image.width;
+                }
+                else {
+                    imgWidth = (width * canvas.width) / 100;
+                    imgHeight = (height * canvas.height) / 100;
+                }
                 if (right !== undefined && top !== undefined) {
                     ctx.drawImage(
                         this.image,
