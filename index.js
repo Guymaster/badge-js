@@ -86,24 +86,17 @@ class BadgeGenerator {
      * @param {BadgeLayer} layer - The layer to add.
      */
     async addLayer(layer) {
-        console.log("Added", layer.type, this.phantomBadge)
         const copyLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
         this.layers.push(layer);
         if(this.phantomCanvas){
             await this.phantomBadge.addLayer(copyLayer);
         }
-        console.log("drawing");
         await this.draw();
-        console.log("drawn");
         setTimeout(() => {
             const resizeEvent = new Event('resize');
             window.dispatchEvent(resizeEvent);
         }, 0);
-        console.log(this.isPhantom);
         if(this.isPhantom) return;
-        // await this.phantomBadge.addLayer(copyLayer);
-        console.log("Added", layer.type)
-        console.log(this.phantomBadge)
     }
 
     /**
@@ -125,7 +118,7 @@ class BadgeGenerator {
      * Draws the badge on the canvas.
      * @returns {Promise<void>}
      */
-    async draw() {console.log("draw");
+    async draw() {
         this.canvas.getContext("2d").clearRect(0, 0, this.canvas.width, this.canvas.height);
     
         await Promise.all(this.layers.map(layer => layer.draw(this.canvas)));
@@ -173,7 +166,6 @@ class BadgeTextLayer extends BadgeLayer {
     }) {
         if(!((options.right!=undefined && options.top!=undefined) || (options.right!=undefined && options.bottom!=undefined) || (options.left!=undefined && options.bottom!=undefined) || (options.left!=undefined && options.top!=undefined))){
             throw new Error("Only one of the following options should be set: right and top, right and bottom, left and bottom, left and top");
-            
         }
         super({
             ...options,
@@ -242,28 +234,71 @@ class BadgeImageLayer extends BadgeLayer {
      */
     constructor(imageSrc, options = {
         bottom: undefined,
-        left: 10,
+        left: (renderedHeight, redenredWidth) => 0,
         right: undefined,
-        top: 80,
+        top: (renderedHeight, redenredWidth) => 0,
         width: 50,
         height: 50
     }) {
-        super(options);
+        if(!((options.right!=undefined && options.top!=undefined) || (options.right!=undefined && options.bottom!=undefined) || (options.left!=undefined && options.bottom!=undefined) || (options.left!=undefined && options.top!=undefined))){
+            throw new Error("Only one of the following options should be set: right and top, right and bottom, left and bottom, left and top");
+        }
+        super({
+            ...options,
+            left: 0,
+            top: 0,
+            bottom: 0,
+            right: 0
+        });
         this.options = options;
         this.type = "image";
         this.image = new Image();
         this.image.crossOrigin = "anonymous"; 
         this.image.src = imageSrc;
+        this.options.leftF = options.left;
+        this.options.topF = options.top;
+        this.options.bottomF = options.bottom;
+        this.options.rightF = options.right;
+    }
+
+    static getRenderedSize(image, width, height, canvas){
+        let imgWidth;
+        let imgHeight;
+        if(width == undefined && height != undefined){
+            imgHeight = (height * canvas.height) / 100;
+            imgWidth = (imgHeight * image.width) / image.height;
+        }
+        else if(width != undefined && height == undefined){
+            imgWidth = (width * canvas.width) / 100;
+            imgHeight = (imgWidth * image.height) / image.width;
+        }
+        else {
+            imgWidth = (width * canvas.width) / 100;
+            imgHeight = (height * canvas.height) / 100;
+        }
+        return {width: (imgWidth / canvas.width) * 100, height: (imgHeight / canvas.height) * 100};
     }
 
     async draw(canvas) {
         const ctx = canvas.getContext("2d");
-        const { width, height, left, right, top, bottom } = this.options;
     
         return new Promise((resolve, reject) => {
             let imgWidth;
             let imgHeight;
             const drawImage = () => {
+                let width = this.options.width;
+                let height = this.options.height;
+                const rendered = BadgeImageLayer.getRenderedSize(this.image, width, height, canvas);
+                const rHeight = rendered.height;
+                const rWidth = rendered.width;
+                this.options.left = (this.options.leftF instanceof Function) ? this.options.leftF(rHeight, rWidth) : undefined;
+                this.options.top = (this.options.topF instanceof Function) ? this.options.topF(rHeight, rWidth) : undefined;
+                this.options.bottom = (this.options.bottomF instanceof Function) ? this.options.bottomF(rHeight, rWidth) : undefined;
+                this.options.right = (this.options.rightF instanceof Function) ? this.options.rightF(rHeight, rWidth) : undefined;
+                const top = this.options.top;
+                const right = this.options.right;
+                const bottom = this.options.bottom;
+                const left = this.options.left;
                 if(width == undefined && height != undefined){
                     imgHeight = (height * canvas.height) / 100;
                     imgWidth = (imgHeight * this.image.width) / this.image.height;
