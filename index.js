@@ -5,7 +5,7 @@ class BadgeGenerator {
      /**
      * Creates a badge generator.
      * @param {string} canvasId - The ID of the canvas element.
-     * @param {{ downloadBtnId?: string, exportHeight?: number [2048], exportWidth?: number [2048], exportName?: string}} options - Configuration options.
+     * @param {{ downloadBtnId?: string, exportHeight?: number [2048], exportWidth?: number [2048], exportName?: string, isPhantom: boolean}} options - Configuration options.
      */
     constructor(canvasId, options) {
         this.canvasId = canvasId;
@@ -13,6 +13,7 @@ class BadgeGenerator {
         this.exportHeight = options.exportHeight?? 2048;
         this.exportWidth = options.exportWidth?? 2048;
         this.exportName = options.exportName?? "Image";
+        this.isPhantom = options.isPhantom?? false;
         if (!this.canvas) {
             throw new Error("Canvas element not found");
         }
@@ -24,10 +25,12 @@ class BadgeGenerator {
         }
 
         window.addEventListener('resize', () => {
-            this.refreshSize();
+            this.refresh();
+            this.draw();
         });
         this.layers = [];
-        this.refreshSize();
+        this.refresh();
+        this.draw();
         this.btnEventId = null;
         if (this.downloadBtn) {
             if (this.btnEventId) {
@@ -44,16 +47,26 @@ class BadgeGenerator {
             };
         
             this.downloadBtn.addEventListener('click', this.btnEventId);
-        }        
+        }
+        if(!options.isPhantom){
+            this.phantomCanvas = document.createElement('canvas');
+            this.phantomCanvas.setAttribute('id', `${this.canvasId}-phantom`);
+            document.body.appendChild(this.phantomCanvas);
+            this.phantomCanvas.width = this.exportWidth;
+            this.phantomCanvas.height = this.exportHeight; 
+            this.phantomCanvas.style.width = `${this.exportWidth}px`;
+            this.phantomCanvas.style.height = `${this.exportHeight}px`;
+            this.phantomBadge = new BadgeGenerator(this.phantomCanvas.id, {isPhantom: true, exportHeight: this.exportHeight, exportWidth: this.exportWidth});
+        }
     }
 
     /**
      * Refreshes the size of the canvas.
      */
-    refreshSize(){
+    async refresh(){
         this.canvas.width = this.canvas.clientWidth;
         this.canvas.height = this.canvas.clientHeight;
-        this.draw();
+        return this.draw();
     }
 
     /**
@@ -69,12 +82,24 @@ class BadgeGenerator {
      * @param {BadgeLayer} layer - The layer to add.
      */
     async addLayer(layer) {
+        console.log("Added", layer.type, this.phantomBadge)
+        const copyLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
         this.layers.push(layer);
+        if(this.phantomCanvas){
+            await this.phantomBadge.addLayer(copyLayer);
+        }
+        console.log("drawing");
         await this.draw();
+        console.log("drawn");
         setTimeout(() => {
             const resizeEvent = new Event('resize');
             window.dispatchEvent(resizeEvent);
-        }, 0)
+        }, 0);
+        console.log(this.isPhantom);
+        if(this.isPhantom) return;
+        // await this.phantomBadge.addLayer(copyLayer);
+        console.log("Added", layer.type)
+        console.log(this.phantomBadge)
     }
 
     /**
@@ -82,12 +107,13 @@ class BadgeGenerator {
      * @returns {Promise<string>} The generated data URL.
      */
     async getDownloadURL() {
-        const exportCanvas = document.createElement('canvas');
-        exportCanvas.width = this.exportWidth;
-        exportCanvas.height = this.exportHeight;
-        const exportCtx = exportCanvas.getContext('2d');
+        // const exportCanvas = document.createElement('canvas');
+        // exportCanvas.width = this.exportWidth;
+        // exportCanvas.height = this.exportHeight;
+        // const exportCtx = exportCanvas.getContext('2d');
 
-        exportCtx.drawImage(this.canvas, 0, 0, this.exportWidth, this.exportHeight);
+        // exportCtx.drawImage(this.canvas, 0, 0, this.exportWidth, this.exportHeight);
+        const exportCanvas = this.phantomCanvas;
         return exportCanvas.toDataURL('image/png');
     }
 
@@ -95,12 +121,10 @@ class BadgeGenerator {
      * Draws the badge on the canvas.
      * @returns {Promise<void>}
      */
-    async draw() {
+    async draw() {console.log("draw");
         this.canvas.getContext("2d").clearRect(0, 0, this.canvas.width, this.canvas.height);
     
-        for (const layer of this.layers) {
-            await layer.draw(this.canvas);
-        }
+        await Promise.all(this.layers.map(layer => layer.draw(this.canvas)));
         return Promise.resolve();
     }    
 }
@@ -122,7 +146,7 @@ class BadgeLayer {
      * Draws the layer on a given canvas.
      * @param {HTMLCanvasElement} canvas - The canvas to draw on.
      */
-    draw() {}
+    async draw() {}
 }
 
 /**
@@ -176,29 +200,30 @@ class BadgeTextLayer extends BadgeLayer {
     async draw(canvas) {
         await document.fonts.ready;
         const ctx = canvas.getContext("2d");
-        ctx.font = `${this.options.size*canvas.height/100}px ${this.font}`;
-        const {height, width} = BadgeTextLayer.getRenderedSize(this.text, this.font, this.options.size, canvas);
+        ctx.font = `${this.options.size * canvas.height / 100}px ${this.font}`;
+        const { height, width } = BadgeTextLayer.getRenderedSize(this.text, this.font, this.options.size, canvas);
         const renderedHeight = height;
-        const redenredWidth = width;
-        this.options.left = (this.options.leftF instanceof Function) ? this.options.leftF(renderedHeight, redenredWidth) : undefined;
-        this.options.top = (this.options.topF instanceof Function) ? this.options.topF(renderedHeight, redenredWidth) : undefined;
-        this.options.bottom = (this.options.bottomF instanceof Function) ? this.options.bottomF(renderedHeight, redenredWidth) : undefined;
-        this.options.right = (this.options.rightF instanceof Function) ? this.options.rightF(renderedHeight, redenredWidth) : undefined;
+        const renderedWidth = width;
+        this.options.left = (this.options.leftF instanceof Function) ? this.options.leftF(renderedHeight, renderedWidth) : undefined;
+        this.options.top = (this.options.topF instanceof Function) ? this.options.topF(renderedHeight, renderedWidth) : undefined;
+        this.options.bottom = (this.options.bottomF instanceof Function) ? this.options.bottomF(renderedHeight, renderedWidth) : undefined;
+        this.options.right = (this.options.rightF instanceof Function) ? this.options.rightF(renderedHeight, renderedWidth) : undefined;
         ctx.fillStyle = this.options.color;
         const textMetrics = ctx.measureText(this.text);
         const textHeight = textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent;
-        if(this.options.right!=undefined && this.options.top!=undefined){
-            ctx.fillText(this.text, canvas.width - this.options.right*canvas.width/100 - textMetrics.width, this.options.top*canvas.height/100+textHeight);
-        }
-        else if(this.options.right!=undefined && this.options.bottom!=undefined){
-            ctx.fillText(this.text, canvas.width - this.options.right*canvas.width/100 - textMetrics.width, canvas.height - this.options.bottom*canvas.height/100);
-        }
-        else if(this.options.left!=undefined && this.options.bottom!=undefined){
-            ctx.fillText(this.text, this.options.left*canvas.width/100, canvas.height - this.options.bottom*canvas.height/100);
-        }
-        else{
-            ctx.fillText(this.text, this.options.left*canvas.width/100, this.options.top*canvas.height/100+textHeight);
-        }
+
+        return new Promise((resolve) => {
+            if (this.options.right !== undefined && this.options.top !== undefined) {
+                ctx.fillText(this.text, canvas.width - this.options.right * canvas.width / 100 - textMetrics.width, this.options.top * canvas.height / 100 + textHeight);
+            } else if (this.options.right !== undefined && this.options.bottom !== undefined) {
+                ctx.fillText(this.text, canvas.width - this.options.right * canvas.width / 100 - textMetrics.width, canvas.height - this.options.bottom * canvas.height / 100);
+            } else if (this.options.left !== undefined && this.options.bottom !== undefined) {
+                ctx.fillText(this.text, this.options.left * canvas.width / 100, canvas.height - this.options.bottom * canvas.height / 100);
+            } else {
+                ctx.fillText(this.text, this.options.left * canvas.width / 100, this.options.top * canvas.height / 100 + textHeight);
+            }
+            resolve();
+        });
     }
 }
 
@@ -230,37 +255,63 @@ class BadgeImageLayer extends BadgeLayer {
     async draw(canvas) {
         const ctx = canvas.getContext("2d");
         const { width, height, left, right, top, bottom } = this.options;
-        const imgWidth = width * canvas.width / 100;
-        const imgHeight = height * canvas.height / 100;
-        // this.image.src = this.imageSrc;
-        if(this.image.src !== undefined && this.image.complete && this.image.src !== "") {
-            setTimeout(() => {
+        const imgWidth = (width * canvas.width) / 100;
+        const imgHeight = (height * canvas.height) / 100;
+    
+        return new Promise((resolve, reject) => {
+            const drawImage = () => {
                 if (right !== undefined && top !== undefined) {
-                    ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, top * canvas.height / 100, imgWidth, imgHeight);
+                    ctx.drawImage(
+                        this.image,
+                        canvas.width - (right * canvas.width) / 100 - imgWidth,
+                        (top * canvas.height) / 100,
+                        imgWidth,
+                        imgHeight
+                    );
                 } else if (right !== undefined && bottom !== undefined) {
-                    ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, canvas.height - bottom * canvas.height / 100 - imgHeight, imgWidth, imgHeight);
+                    ctx.drawImage(
+                        this.image,
+                        canvas.width - (right * canvas.width) / 100 - imgWidth,
+                        canvas.height - (bottom * canvas.height) / 100 - imgHeight,
+                        imgWidth,
+                        imgHeight
+                    );
                 } else if (left !== undefined && bottom !== undefined) {
-                    ctx.drawImage(this.image, left * canvas.width / 100, canvas.height - bottom * canvas.height / 100 - imgHeight, imgWidth, imgHeight);
+                    ctx.drawImage(
+                        this.image,
+                        (left * canvas.width) / 100,
+                        canvas.height - (bottom * canvas.height) / 100 - imgHeight,
+                        imgWidth,
+                        imgHeight
+                    );
                 } else {
-                    ctx.drawImage(this.image, left * canvas.width / 100, top * canvas.height / 100, imgWidth, imgHeight);
+                    ctx.drawImage(
+                        this.image,
+                        (left * canvas.width) / 100,
+                        (top * canvas.height) / 100,
+                        imgWidth,
+                        imgHeight
+                    );
                 }
-            }, 0);
-            return;
-        }
-        this.image.onload = () => {
-            setTimeout(() => {
-                if (right !== undefined && top !== undefined) {
-                    ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, top * canvas.height / 100, imgWidth, imgHeight);
-                } else if (right !== undefined && bottom !== undefined) {
-                    ctx.drawImage(this.image, canvas.width - right * canvas.width / 100 - imgWidth, canvas.height - bottom * canvas.height / 100 - imgHeight, imgWidth, imgHeight);
-                } else if (left !== undefined && bottom !== undefined) {
-                    ctx.drawImage(this.image, left * canvas.width / 100, canvas.height - bottom * canvas.height / 100 - imgHeight, imgWidth, imgHeight);
-                } else {
-                    ctx.drawImage(this.image, left * canvas.width / 100, top * canvas.height / 100, imgWidth, imgHeight);
-                }
-            }, 0);
-        };
-    }
+                resolve();
+            };
+    
+            if (!this.image.src) {
+                return reject(new Error("L'image n'a pas de source définie."));
+            }
+    
+            if (this.image.complete) {
+                drawImage();
+            } else {
+                this.image.onload = () => {
+                    drawImage();
+                };
+                this.image.onerror = () => {
+                    reject(new Error("Erreur lors du chargement de l'image."));
+                };
+            }
+        });
+    }    
 }
 
 /**
@@ -292,15 +343,18 @@ class BadgeRectLayer extends BadgeLayer {
         const rectHeight = height * canvas.height / 100;
         ctx.fillStyle = color;
 
-        if (right !== undefined && top !== undefined) {
-            ctx.fillRect(canvas.width - right * canvas.width / 100 - rectWidth, top * canvas.height / 100, rectWidth, rectHeight);
-        } else if (right !== undefined && bottom !== undefined) {
-            ctx.fillRect(canvas.width - right * canvas.width / 100 - rectWidth, canvas.height - bottom * canvas.height / 100 - rectHeight, rectWidth, rectHeight);
-        } else if (left !== undefined && bottom !== undefined) {
-            ctx.fillRect(left * canvas.width / 100, canvas.height - bottom * canvas.height / 100 - rectHeight, rectWidth, rectHeight);
-        } else {
-            ctx.fillRect(left * canvas.width / 100, top * canvas.height / 100, rectWidth, rectHeight);
-        }
+        return new Promise((resolve) => {
+            if (right !== undefined && top !== undefined) {
+                ctx.fillRect(canvas.width - right * canvas.width / 100 - rectWidth, top * canvas.height / 100, rectWidth, rectHeight);
+            } else if (right !== undefined && bottom !== undefined) {
+                ctx.fillRect(canvas.width - right * canvas.width / 100 - rectWidth, canvas.height - bottom * canvas.height / 100 - rectHeight, rectWidth, rectHeight);
+            } else if (left !== undefined && bottom !== undefined) {
+                ctx.fillRect(left * canvas.width / 100, canvas.height - bottom * canvas.height / 100 - rectHeight, rectWidth, rectHeight);
+            } else {
+                ctx.fillRect(left * canvas.width / 100, top * canvas.height / 100, rectWidth, rectHeight);
+            }
+            resolve();
+        });
     }
 }
 
