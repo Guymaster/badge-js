@@ -56,6 +56,10 @@ class BadgeGenerator {
             this.phantomCanvas.height = this.exportHeight; 
             this.phantomCanvas.style.width = `${this.exportWidth}px`;
             this.phantomCanvas.style.height = `${this.exportHeight}px`;
+            this.phantomCanvas.style.position = 'fixed';
+            this.phantomCanvas.style.top = `-${this.exportHeight}px`;
+            this.phantomCanvas.style.left = `-${this.exportWidth}px`;
+            this.phantomCanvas.style.zIndex = '-1';
             this.phantomBadge = new BadgeGenerator(this.phantomCanvas.id, {isPhantom: true, exportHeight: this.exportHeight, exportWidth: this.exportWidth});
         }
     }
@@ -297,7 +301,7 @@ class BadgeImageLayer extends BadgeLayer {
             };
     
             if (!this.image.src) {
-                return reject(new Error("L'image n'a pas de source définie."));
+                return reject(new Error("No src provided for the image."));
             }
     
             if (this.image.complete) {
@@ -307,7 +311,7 @@ class BadgeImageLayer extends BadgeLayer {
                     drawImage();
                 };
                 this.image.onerror = () => {
-                    reject(new Error("Erreur lors du chargement de l'image."));
+                    reject(new Error("Error loading image."));
                 };
             }
         });
