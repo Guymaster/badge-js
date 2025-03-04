@@ -1,0 +1,30 @@
+.landing img {
+    width: 200px;
+    max-width: 40%;
+    margin: auto;
+    display: block;
+}
+
+.landing a {
+    display: block;
+}
+
+.advs {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+section {
+    margin-bottom: 40px;
+}
+
+
+@media (min-width: 768px) {
+    .advs {
+        grid-template-columns: repeat(2, minmax(200px, 1fr));
+    }
+    section {
+        margin-bottom: 80px;
+    }
+}

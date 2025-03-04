@@ -1,12 +1,12 @@
 {
-  "name": "badge-js",
+  "name": "@guymaster/badge-js",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "@Guymaster (Guy Roger THEA)",
   "license": "ISC",
   "description": "",
   "devDependencies": {
